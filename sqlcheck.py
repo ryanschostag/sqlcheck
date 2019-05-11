@@ -4,8 +4,23 @@
 Created on Fri May 10 19:31:41 2019
 
 @author: john
+Module to showcase a way to control which SQL statements can be 
+passed through a SQL connection
+
+Use cases:
+    
+    1. Single SELECT, UPDATE, and INSERT statement
+    2. Do not pass any other commands but SELECT, UPDATE, and INSERT
+    3. Multiple statement types in single statement
+    4. Multiple statements
+
+To find out how many SELECT, INSERT, UPDATE statements there are, will use
+regular expressions. Then, using the findall() method, examine each statement
+type.
+    
 """
 from collections import defaultdict
+import re
 from pprint import pprint
 
 
@@ -18,6 +33,9 @@ class SQL:
     valid = []
     commits = 0
     total = 0
+    select_regex = re.compile(r'[selectSELECT].*')
+    insert_regex = re.compile(r'[insertINSERT].*')
+    update_regex = re.compile(r'[updateUPDATE].*')
 
 
 def send():
