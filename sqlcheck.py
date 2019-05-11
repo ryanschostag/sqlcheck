@@ -81,6 +81,8 @@ def sql_statement_parser(*args, record=None):
             validate(arg, SQL.valid_update, 'update')
         elif 'insert' in arg.lower():
             validate(arg, SQL.valid_insert, 'insert')
+        else:
+            validate(arg, SQL.valid_insert, 'invalid_type')
     else:
         if SQL.invalid:
             raise ValueError(f'Invalid Statements: {SQL.invalid}')
