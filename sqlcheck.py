@@ -21,8 +21,17 @@ type.
 """
 from collections import defaultdict
 import re
-from pprint import pprint
+import logging
 
+format_string = ('{"time": "%(asctime)s", "level": "%(levelname)s", '
+                 '"file": "%(pathname)s", "function": "%(funcName)s", '
+                 '"line": %(lineno)d, "message": "%(message)s"}')
+logging.basicConfig(
+    filename='sqlcheck.log',
+    format=format_string,
+    level=logging.DEBUG,
+    filemode='w'
+)
 
 class SQL:
     _sql = defaultdict(dict)
@@ -36,51 +45,84 @@ class SQL:
     select_regex = re.compile(r'select|SELECT.*')
     insert_regex = re.compile(r'insert|INSERT.*')
     update_regex = re.compile(r'update|UPDATE.*')
+    split_rule = ' '
 
 
 def send():
-    pprint(SQL._sql)
     for k, v in SQL._sql.items():
-        if v['valid']:
+        if False not in v['valid']:
             v['committed'] = True
             SQL.commits += 1
         else:
             v['committed'] = False
     else:
-        pprint(SQL._sql)
+        logging.debug(SQL._sql)
         SQL._sql.clear()
 
 
-def validate(sql_statement, validation_string, statement_type):
-    record = None
-    for key, value in SQL._sql.items():
-        if value['command'] == sql_statement:
-            record = key
+def validate(sql_statement, validation_string, statement_type, record):
+    """
+    Validates a SQL statement
     
+    :param sql_statement: <string>
+    :param validation_string: <string>
+    :param statement_type: <string>
+    :param record: <int> key in SQL._sql
+    """
     if SQL._sql[record]['committed']:
+        logging.debug(f'Already committed: {SQL._sql[record]}')
         return None
     
     if statement_type == 'select':
-        for i in validation_string.split(' '):
+        for i in validation_string.split(SQL.split_rule):
             if i in sql_statement:
-                SQL._sql[record]['checked'] = True
-                SQL._sql[record]['valid'] = True
+                logging.debug(f'validation_string: {i}')
+                logging.debug(f'sql_statement: {sql_statement}')
+                SQL._sql[record]['checked'].append(True)
+                SQL._sql[record]['valid'].append(True)
             else:
-                SQL._sql[record]['checked'] = True
+                logging.debug(f'validation_string: {i}')
+                logging.debug(f'sql_statement: {sql_statement}')
+                SQL._sql[record]['checked'].append(True)
+                SQL._sql[record]['valid'].append(False)
     else:
         if validation_string in sql_statement:
-            SQL._sql[record]['checked'] = True
-            SQL._sql[record]['valid'] = True
+            logging.debug(f'validation_string: {validation_string}')
+            logging.debug(f'sql_statement: {sql_statement}')
+            SQL._sql[record]['checked'].append(True)
+            SQL._sql[record]['valid'].append(True)
         else:
-            SQL._sql[record]['checked'] = True
+            logging.debug(f'validation_string: {validation_string}')
+            logging.debug(f'sql_statement: {sql_statement}')
+            SQL._sql[record]['checked'].append(True)
+            SQL._sql[record]['valid'].append(False)
     
-    if SQL._sql[record]['valid']:
+    if True in SQL._sql[record]['valid']:
         SQL.valid.append(SQL._sql[record]['command'])
     else:
         SQL.invalid.append(SQL._sql[record]['command'])
-    
 
-def sql_statement_parser(*args):
+
+def validation_processor():
+    """
+    Iterates through SQL._sql[record][select|insert|update] lists 
+    and sends each of those lists to the validate function
+    
+    :returns: None
+    """
+    for record in SQL._sql:
+        if SQL._sql[record]['select']:
+            for statement in SQL._sql[record]['select']:
+                validate(statement, SQL.valid_select, 'select', record)
+        if SQL._sql[record]['insert']:
+            for statement in SQL._sql[record]['insert']:
+                validate(statement, SQL.valid_insert, 'insert', record)
+        if SQL._sql[record]['update']:
+            for statement in SQL._sql[record]['update']:
+                validate(statement, SQL.valid_update, 'update', record)
+
+
+def sql_data(*args):
     """
     Loop through *args, which are SQL statements, and 
     enter data in SQL._sql dictionary of dictionaries.
@@ -91,32 +133,39 @@ def sql_statement_parser(*args):
     """
     if '__iter__' not in dir(args):
         if 'key' in dir(args) or isinstance(args, str):
-            raise TypeError(f'Invalid type: {args}')
+            te = f'Invalid type: {args}'
+            logging.error(te)
+            raise TypeError(te)
+            
+    if not args:
+        ve = f'Cannot process empty data structure'
+        logging.error(ve)
+        raise ValueError(ve)
         
     for number, arg in enumerate(args):
         SQL._sql[number]['command'] = arg
-        SQL._sql[number]['checked'] = False
-        SQL._sql[number]['valid'] = False
+        SQL._sql[number]['checked'] = []
+        SQL._sql[number]['valid'] = []
         SQL._sql[number]['committed'] = False
         SQL._sql[number]['select'] = re.findall(SQL.select_regex, arg)
         SQL._sql[number]['insert'] = re.findall(SQL.insert_regex, arg)
         SQL._sql[number]['update'] = re.findall(SQL.update_regex, arg)
+        SQL._sql[number]['detected'] = sum([
+                len(SQL._sql[number]['select']),
+                len(SQL._sql[number]['insert']),
+                len(SQL._sql[number]['update'])
+            ])
         SQL.total += 1
-
-
-def validation_processor():
-    """
-    Loops through SQL._sql[record][select][insert][update] lists 
-    and sends each of those lists to the validate function
-    """
-    pass
+        if SQL._sql[number]['detected'] == 0:
+            SQL.invalid.append(arg)
 
 
 def sql_gateway(*args):
     try:
-        sql_statement_parser(*args)
+        sql_data(*args)
+        validation_processor()
     except ValueError as val_err:
-        print(val_err)
+        logging.error(val_err)
     finally:
         send()
 
