@@ -33,9 +33,9 @@ class SQL:
     valid = []
     commits = 0
     total = 0
-    select_regex = re.compile(r'[selectSELECT].*')
-    insert_regex = re.compile(r'[insertINSERT].*')
-    update_regex = re.compile(r'[updateUPDATE].*')
+    select_regex = re.compile(r'select|SELECT.*')
+    insert_regex = re.compile(r'insert|INSERT.*')
+    update_regex = re.compile(r'update|UPDATE.*')
 
 
 def send():
@@ -80,30 +80,37 @@ def validate(sql_statement, validation_string, statement_type):
         SQL.invalid.append(SQL._sql[record]['command'])
     
 
-def sql_statement_parser(*args, record=None):
+def sql_statement_parser(*args):
+    """
+    Loop through *args, which are SQL statements, and 
+    enter data in SQL._sql dictionary of dictionaries.
+    
+    :param args: List of SQL statements (strings)
+    :returns: None
+    :raises: TypeError
+    """
+    if '__iter__' not in dir(args):
+        if 'key' in dir(args) or isinstance(args, str):
+            raise TypeError(f'Invalid type: {args}')
+        
     for number, arg in enumerate(args):
         SQL._sql[number]['command'] = arg
         SQL._sql[number]['checked'] = False
         SQL._sql[number]['valid'] = False
         SQL._sql[number]['committed'] = False
+        SQL._sql[number]['select'] = re.findall(SQL.select_regex, arg)
+        SQL._sql[number]['insert'] = re.findall(SQL.insert_regex, arg)
+        SQL._sql[number]['update'] = re.findall(SQL.update_regex, arg)
         SQL.total += 1
-        
-        if 'select' in arg.lower():
-            if 'insert' in arg.lower():
-                validate(arg, SQL.valid_insert, 'insert')
-            elif 'update' in arg.lower():
-                validate(arg, SQL.valid_update, 'update')
-            else:
-                validate(arg, SQL.valid_select, 'select')
-        elif 'update' in arg.lower():
-            validate(arg, SQL.valid_update, 'update')
-        elif 'insert' in arg.lower():
-            validate(arg, SQL.valid_insert, 'insert')
-        else:
-            validate(arg, SQL.valid_insert, 'invalid_type')
-    else:
-        if SQL.invalid:
-            raise ValueError(f'Invalid Statements: {SQL.invalid}')
+
+
+def validation_processor():
+    """
+    Loops through SQL._sql[record][select][insert][update] lists 
+    and sends each of those lists to the validate function
+    """
+    pass
+
 
 def sql_gateway(*args):
     try:
