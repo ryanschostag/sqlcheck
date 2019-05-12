@@ -22,6 +22,8 @@ type.
 from collections import defaultdict
 import re
 import logging
+from pprint import pprint
+
 
 format_string = ('{"time": "%(asctime)s", "level": "%(levelname)s", '
                  '"file": "%(pathname)s", "function": "%(funcName)s", '
@@ -32,6 +34,7 @@ logging.basicConfig(
     level=logging.DEBUG,
     filemode='w'
 )
+
 
 class SQL:
     _sql = defaultdict(dict)
@@ -50,13 +53,21 @@ class SQL:
 
 def send():
     for k, v in SQL._sql.items():
-        if False not in v['valid']:
+        expression = ('v["detected"] > 0 and sum([len(v["valid_select"]), '
+                      'len(v["valid_insert"]), len(v["valid_update"])]) == '
+                      'v["detected"]')
+        if eval(expression):
             v['committed'] = True
+            if (k, v['command']) not in SQL.valid:
+                SQL.valid.append((k, v['command']))
             SQL.commits += 1
         else:
             v['committed'] = False
+            if (k, v['command']) not in SQL.invalid:
+                SQL.invalid.append((k, v['command']))
     else:
         logging.debug(SQL._sql)
+        pprint(SQL._sql)
         SQL._sql.clear()
 
 
@@ -79,28 +90,23 @@ def validate(sql_statement, validation_string, statement_type, record):
                 logging.debug(f'validation_string: {i}')
                 logging.debug(f'sql_statement: {sql_statement}')
                 SQL._sql[record]['checked'].append(True)
-                SQL._sql[record]['valid'].append(True)
+                SQL._sql[record][f'valid_{statement_type}'].append(
+                            sql_statement
+                        )
             else:
                 logging.debug(f'validation_string: {i}')
                 logging.debug(f'sql_statement: {sql_statement}')
                 SQL._sql[record]['checked'].append(True)
-                SQL._sql[record]['valid'].append(False)
     else:
         if validation_string in sql_statement:
             logging.debug(f'validation_string: {validation_string}')
             logging.debug(f'sql_statement: {sql_statement}')
             SQL._sql[record]['checked'].append(True)
-            SQL._sql[record]['valid'].append(True)
+            SQL._sql[record][f'valid_{statement_type}'].append(sql_statement)
         else:
             logging.debug(f'validation_string: {validation_string}')
             logging.debug(f'sql_statement: {sql_statement}')
             SQL._sql[record]['checked'].append(True)
-            SQL._sql[record]['valid'].append(False)
-    
-    if True in SQL._sql[record]['valid']:
-        SQL.valid.append(SQL._sql[record]['command'])
-    else:
-        SQL.invalid.append(SQL._sql[record]['command'])
 
 
 def validation_processor():
@@ -150,6 +156,9 @@ def sql_data(*args):
         SQL._sql[number]['select'] = re.findall(SQL.select_regex, arg)
         SQL._sql[number]['insert'] = re.findall(SQL.insert_regex, arg)
         SQL._sql[number]['update'] = re.findall(SQL.update_regex, arg)
+        SQL._sql[number]['valid_select'] = []
+        SQL._sql[number]['valid_insert'] = []
+        SQL._sql[number]['valid_update'] = []
         SQL._sql[number]['detected'] = sum([
                 len(SQL._sql[number]['select']),
                 len(SQL._sql[number]['insert']),
@@ -157,7 +166,9 @@ def sql_data(*args):
             ])
         SQL.total += 1
         if SQL._sql[number]['detected'] == 0:
-            SQL.invalid.append(arg)
+            SQL.invalid.append((number, arg))
+        
+        logging.debug(f'Added to SQL._sql: {SQL._sql[number]}')
 
 
 def sql_gateway(*args):
@@ -178,6 +189,6 @@ if __name__ == "__main__":
     s5 = 'SELECT column_one FROM table_two'
     commands = s1, s2, s3, s4, s5
     sql_gateway(*commands)
-    print(f'{SQL.commits} commits of {SQL.total}')
-    print(f'Committed: {SQL.valid}')
-    print(f'Not Committed: {SQL.invalid}')
+    logging.info(f'{SQL.commits} commits of {SQL.total}')
+    logging.info(f'Committed: {SQL.valid}')
+    logging.warning(f'Not Committed: {SQL.invalid}')
