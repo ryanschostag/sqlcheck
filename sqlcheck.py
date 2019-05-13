@@ -22,7 +22,6 @@ type.
 from collections import defaultdict
 import re
 import logging
-from pprint import pprint
 
 
 format_string = ('{"time": "%(asctime)s", "level": "%(levelname)s", '
@@ -67,7 +66,6 @@ def send():
                 SQL.invalid.append((k, v['command']))
     else:
         logging.debug(SQL._sql)
-        pprint(SQL._sql)
         SQL._sql.clear()
 
 
@@ -179,6 +177,22 @@ def sql_gateway(*args):
         logging.error(val_err)
     finally:
         send()
+        
+
+def report():
+    if SQL.invalid:
+        r = ('SQL Gateway Report: '
+             f'{SQL.commits} commits of {SQL.total} statements; '
+             f'Committed: {SQL.valid}; '
+             f'Not Committed: {SQL.invalid}.')
+        logging.warning(r)
+    else:
+        r = ('SQL Gateway Report\n'
+             f'{SQL.commits} commits of {SQL.total} statements; '
+             f'Committed: {SQL.valid}; ')
+        logging.info(r)
+    
+    return r
 
 
 if __name__ == "__main__":
@@ -187,8 +201,7 @@ if __name__ == "__main__":
     s3 = 'INSERT INTO table_one WHERE (SELECT id FROM table_two)'
     s4 = 'DROP TABLE table_three'
     s5 = 'SELECT column_one FROM table_two'
-    commands = s1, s2, s3, s4, s5
+    s6 = 'SELECT MAX(id)'
+    commands = s1, s2, s3, s4, s5, s6
     sql_gateway(*commands)
-    logging.info(f'{SQL.commits} commits of {SQL.total}')
-    logging.info(f'Committed: {SQL.valid}')
-    logging.warning(f'Not Committed: {SQL.invalid}')
+    print(report())
